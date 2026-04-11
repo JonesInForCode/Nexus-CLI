@@ -1,0 +1,47 @@
+
+### Nexus-CLI Development Roadmap
+#### Phase 1: The Core Kernel & Registry
+ * **Goal:** Set up the Node environment, the filesystem manager, and the central registry.
+ * **Key Components:**
+   * **The Registry:** A global map that tracks database locations, schemas, and encryption status.
+   * **The File Manager:** Atomic read/write operations for individual .json database files.
+   * **Command Routing:** The basic loop that keeps the terminal open and listens for input.
+#### Phase 2: Schema Engine & Runtime Validation
+ * **Goal:** Implement the "Gatekeeper."
+ * **Key Components:**
+   * **Type Casting:** Logic to turn terminal strings into TS primitives.
+   * **Zod Integration:** Dynamic schema generation from CLI strings.
+   * **Immediate Error Feedback:** Re-prompting logic for invalid input.
+#### Phase 3: The Cryptographic Vault
+ * **Goal:** Secure the modular files.
+ * **Key Components:**
+   * **Master Key Derivation:** Argon2 or Scrypt for password hashing.
+   * **AES-256-GCM:** The encryption/decryption pipe for file I/O.
+   * **BIP-39 Recovery:** The 12-word mnemonic generation and recovery sequence.
+#### Phase 4: Procedural Forms & Projections
+ * **Goal:** The interface layer.
+ * **Key Components:**
+   * **Form Engine:** Guided CLI question-and-answer loops.
+   * **HTML/CSS Compiler:** The "Dumb GUI" driver that maps data to templates.
+   * **Export Module:** Markdown and PDF/HTML generation.
+### Phase 0: The Initialization Prompt for Jules
+Before we start the CLI engine, Jules needs the infrastructure. Unlike the React dashboard, this is a **backend-heavy** setup.
+> **Instruction for Jules:**
+> "We are starting **Project B: Nexus-CLI**, a headless, schema-driven object engine.
+> **Environment:** Node.js + TypeScript (ESM).
+> **Architecture Requirements:**
+>  1. **Directory Structure:**
+>    * /src/core: (Kernel, Command Dispatcher)
+>    * /src/storage: (FileSystem Manager, Registry)
+>    * /src/validation: (Schema definitions, Type Casters)
+>    * /src/security: (Encryption logic, Vault)
+>    * /data/databases: (Individual JSON files)
+>  2. **Dependencies:** >     * commander: (For CLI argument parsing)
+>    * zod: (For runtime schema validation)
+>    * fs-extra: (For atomic file operations)
+>    * enquirer: (For the interactive 'Form' prompts)
+>    * crypto: (Native Node module for AES-256-GCM)
+>  3. **The Task:** >     * Initialize a fresh Node project with TypeScript.
+>    * Create the registry.json structure.
+>    * Build a basic Command Loop that keeps the process alive and echoes back: Nexus > [your command].
+>    * Ensure the project is set up to handle individual JSON files for each database created."

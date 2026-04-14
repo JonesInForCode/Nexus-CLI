@@ -12,6 +12,17 @@ const rl = readline.createInterface({
 const registry = new Registry();
 const dbManager = new DBManager();
 
+
+let currentDatabase: string | null = null;
+
+function updatePrompt() {
+    if (currentDatabase) {
+        rl.setPrompt(`Nexus (${currentDatabase}) > `);
+    } else {
+        rl.setPrompt('Nexus > ');
+    }
+}
+
 function dispatcher(input: string) {
     if (input === '/exit' || input === 'quit') {
         rl.close();
@@ -19,6 +30,98 @@ function dispatcher(input: string) {
     }
 
     const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)$/i;
+
+    const listMatch = input.match(/^\/list$/i);
+    if (listMatch) {
+        const dbs = registry.getRegistry();
+        const output = Object.keys(dbs).map(name => {
+            const db = dbs[name];
+            return {
+                Name: name,
+                Encrypted: db.encrypted,
+                Created: new Date(db.createdAt).toLocaleString()
+            };
+        });
+        if (output.length === 0) {
+            console.log('No databases registered.');
+        } else {
+            console.table(output);
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
+    const useMatch = input.match(/^\/use\s+([a-zA-Z0-9_]+)$/i);
+    if (useMatch) {
+        const dbName = useMatch[1];
+        if (!registry.get(dbName)) {
+            console.error(`Error: Database '${dbName}' is not registered.`);
+        } else {
+            try {
+                dbManager.useDatabase(dbName);
+                currentDatabase = dbName;
+                console.log(`Switched to workspace: ${dbName}`);
+            } catch (error) {
+                console.error((error as Error).message);
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
+    const setMatch = input.match(/^\/set\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)=(.+)$/i);
+    if (setMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const anchor = setMatch[1];
+            const key = setMatch[2];
+            let value = setMatch[3];
+
+            // Remove surrounding quotes if they exist
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+
+            try {
+                dbManager.set(anchor, key, value);
+                console.log(`Saved ${key}='${value}' to anchor '${anchor}'.`);
+            } catch (error) {
+                console.error((error as Error).message);
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
+    const getMatch = input.match(/^\/get\s+([a-zA-Z0-9_]+)$/i);
+    if (getMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const anchor = getMatch[1];
+            try {
+                const data = dbManager.get(anchor);
+                if (data === undefined) {
+                    console.log(`No data found for anchor '${anchor}'.`);
+                } else {
+                    console.log(JSON.stringify(data, null, 2));
+                }
+            } catch (error) {
+                console.error((error as Error).message);
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
     const match = input.match(createDbRegex);
 
     if (match) {
@@ -50,17 +153,17 @@ function dispatcher(input: string) {
         console.log(`Dispatched: ${input}`);
     }
 
-    rl.prompt();
+    updatePrompt(); rl.prompt();
 }
 
-rl.prompt();
+updatePrompt(); rl.prompt();
 
 rl.on('line', (line) => {
     const input = line.trim();
     if (input) {
         dispatcher(input);
     } else {
-        rl.prompt();
+        updatePrompt(); rl.prompt();
     }
 });
 

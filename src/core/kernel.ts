@@ -2,6 +2,7 @@ import * as readline from 'readline';
 import { Registry } from '../storage/registry.js';
 import { DBManager } from '../storage/dbManager.js';
 import path from 'path';
+import { buildZodSchema } from '../validation/schemaBuilder.js';
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -29,7 +30,7 @@ function dispatcher(input: string) {
         return;
     }
 
-    const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)$/i;
+    const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)(?:\s+--schema\s+(.+))?$/i;
 
     const listMatch = input.match(/^\/list$/i);
     if (listMatch) {
@@ -122,10 +123,38 @@ function dispatcher(input: string) {
         return;
     }
 
+
+    const debugSchemaMatch = input.match(/^\/debug-schema\s+([a-zA-Z0-9_]+)$/i);
+    if (debugSchemaMatch) {
+        const dbName = debugSchemaMatch[1];
+        const dbEntry = registry.get(dbName);
+        if (!dbEntry) {
+            console.error(`Error: Database '${dbName}' is not registered.`);
+        } else {
+            try {
+                const schema = buildZodSchema(dbEntry.schema);
+                console.log(`Success: Schema for '${dbName}' compiled properly.`);
+            } catch (error) {
+                console.error(`Error compiling schema for '${dbName}': ${(error as Error).message}`);
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
     const match = input.match(createDbRegex);
 
     if (match) {
         const dbName = match[1];
+        let schemaString: string | null = match[2] || null;
+
+        if (schemaString) {
+            schemaString = schemaString.trim();
+            if ((schemaString.startsWith('"') && schemaString.endsWith('"')) || (schemaString.startsWith("'") && schemaString.endsWith("'"))) {
+                schemaString = schemaString.slice(1, -1);
+            }
+        }
 
         if (registry.get(dbName)) {
             console.error(`Error: Database '${dbName}' already exists.`);
@@ -135,7 +164,7 @@ function dispatcher(input: string) {
             if (created) {
                 const added = registry.add(dbName, {
                     path: relativePath,
-                    schema: null,
+                    schema: schemaString,
                     encrypted: false,
                     createdAt: Date.now()
                 });

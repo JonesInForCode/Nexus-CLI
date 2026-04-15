@@ -1,6 +1,6 @@
 import * as readline from 'readline';
 import { Registry } from '../storage/registry.js';
-import { DBManager } from '../storage/dbManager.js';
+import { DBManager, ValidationError } from '../storage/dbManager.js';
 import path from 'path';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
 import { castValue, getFieldType } from '../validation/typeCaster.js';
@@ -110,7 +110,12 @@ function dispatcher(input: string) {
                 dbManager.set(anchor, key, finalValue);
                 console.log(`Saved ${key}='${value}' to anchor '${anchor}'.`);
             } catch (error) {
-                console.error((error as Error).message);
+                if (error instanceof ValidationError) {
+                    console.error('Validation Error:');
+                    error.errors.forEach(err => console.error(err));
+                } else {
+                    console.error((error as Error).message);
+                }
             }
         }
         updatePrompt();

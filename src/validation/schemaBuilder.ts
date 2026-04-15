@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export function buildZodSchema(schemaString: string | null | undefined) {
+export function buildZodSchema(schemaString: string | null | undefined, isPartial: boolean = false) {
     if (!schemaString || schemaString.trim() === '') {
         return z.record(z.any());
     }
@@ -34,5 +34,6 @@ export function buildZodSchema(schemaString: string | null | undefined) {
         }
     }
 
-    return z.object(shape);
+    const schema = z.object(shape);
+    return isPartial ? schema.partial() : schema;
 }

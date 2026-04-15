@@ -3,6 +3,8 @@ import { Registry } from '../storage/registry.js';
 import { DBManager } from '../storage/dbManager.js';
 import path from 'path';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
+import { castValue, getFieldType } from '../validation/typeCaster.js';
+
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -88,8 +90,24 @@ function dispatcher(input: string) {
                 value = value.slice(1, -1);
             }
 
+            let finalValue: any = value;
+            const dbEntry = registry.get(currentDatabase);
+            if (dbEntry && dbEntry.schema) {
+                const expectedType = getFieldType(dbEntry.schema, key);
+                if (expectedType) {
+                    try {
+                        finalValue = castValue(value, expectedType);
+                    } catch (error) {
+                        console.error(`Error: Expected type [${expectedType}] for field '${key}', received '${value}'.`);
+                        updatePrompt();
+                        rl.prompt();
+                        return;
+                    }
+                }
+            }
+
             try {
-                dbManager.set(anchor, key, value);
+                dbManager.set(anchor, key, finalValue);
                 console.log(`Saved ${key}='${value}' to anchor '${anchor}'.`);
             } catch (error) {
                 console.error((error as Error).message);

@@ -1,5 +1,15 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { validateRecord } from '../validation/validator.js';
+
+export class ValidationError extends Error {
+    public errors: string[];
+    constructor(messages: string[]) {
+        super('Validation failed');
+        this.name = 'ValidationError';
+        this.errors = messages;
+    }
+}
 
 export class DBManager {
     private baseDir: string;
@@ -51,14 +61,25 @@ export class DBManager {
         this.currentDbName = name;
     }
 
-    public set(anchor: string, key: string, value: string): void {
+    public set(anchor: string, key: string, value: any): void {
         if (!this.currentDbName) {
             throw new Error('No database selected.');
         }
+
+        const backup = JSON.parse(JSON.stringify(this.currentData));
+
         if (!this.currentData[anchor]) {
             this.currentData[anchor] = {};
         }
         this.currentData[anchor][key] = value;
+
+        for (const record of Object.values(this.currentData)) {
+            const validation = validateRecord(this.currentDbName, record, true);
+            if (!validation.success && validation.errors) {
+                this.currentData = backup;
+                throw new ValidationError(validation.errors);
+            }
+        }
 
         const dbPath = this.getDbPath(this.currentDbName);
         const tmpPath = `${dbPath}.tmp`;

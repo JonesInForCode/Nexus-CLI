@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export function buildZodSchema(schemaString: string | null | undefined, isPartial: boolean = false) {
     if (!schemaString || schemaString.trim() === '') {
-        return z.record(z.any());
+        return z.record(z.string(), z.any());
     }
 
     const fields = schemaString.split(',').map(s => s.trim()).filter(s => s.length > 0);

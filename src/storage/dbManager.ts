@@ -94,6 +94,36 @@ export class DBManager {
         }
     }
 
+    public setRecord(anchor: string, record: Record<string, any>): void {
+        if (!this.currentDbName) {
+            throw new Error('No database selected.');
+        }
+
+        const backup = JSON.parse(JSON.stringify(this.currentData));
+
+        this.currentData[anchor] = record;
+
+        for (const rec of Object.values(this.currentData)) {
+            const validation = validateRecord(this.currentDbName, rec, false);
+            if (!validation.success && validation.errors) {
+                this.currentData = backup;
+                throw new ValidationError(validation.errors);
+            }
+        }
+
+        const dbPath = this.getDbPath(this.currentDbName);
+        const tmpPath = `${dbPath}.tmp`;
+        try {
+            fs.writeJsonSync(tmpPath, this.currentData, { spaces: 2 });
+            fs.renameSync(tmpPath, dbPath);
+        } catch (error) {
+            if (fs.existsSync(tmpPath)) {
+                fs.unlinkSync(tmpPath);
+            }
+            throw error;
+        }
+    }
+
     public get(anchor: string): any {
         if (!this.currentDbName) {
             throw new Error('No database selected.');

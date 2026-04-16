@@ -4,6 +4,7 @@ import { DBManager, ValidationError } from '../storage/dbManager.js';
 import path from 'path';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
 import { castValue, getFieldType } from '../validation/typeCaster.js';
+import { runForm } from './formEngine.js';
 
 
 const rl = readline.createInterface({
@@ -26,7 +27,7 @@ function updatePrompt() {
     }
 }
 
-function dispatcher(input: string) {
+async function dispatcher(input: string) {
     if (input === '/exit' || input === 'quit') {
         rl.close();
         return;
@@ -166,6 +167,27 @@ function dispatcher(input: string) {
         return;
     }
 
+    const fillMatch = input.match(/^\/fill\s+([a-zA-Z0-9_]+)$/i);
+    if (fillMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const anchor = fillMatch[1];
+            rl.pause();
+            try {
+                await runForm(currentDatabase, anchor);
+                // refresh dbManager state
+                dbManager.useDatabase(currentDatabase);
+            } catch (error) {
+                console.error((error as Error).message);
+            }
+            rl.resume();
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
     const match = input.match(createDbRegex);
 
     if (match) {
@@ -210,10 +232,10 @@ function dispatcher(input: string) {
 
 updatePrompt(); rl.prompt();
 
-rl.on('line', (line) => {
+rl.on('line', async (line) => {
     const input = line.trim();
     if (input) {
-        dispatcher(input);
+        await dispatcher(input);
     } else {
         updatePrompt(); rl.prompt();
     }

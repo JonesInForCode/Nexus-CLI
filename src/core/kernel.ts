@@ -5,6 +5,8 @@ import path from 'path';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
 import { castValue, getFieldType } from '../validation/typeCaster.js';
 import { runForm } from './formEngine.js';
+import crypto from 'crypto';
+import { deriveKey, encryptData, decryptData, DecryptionError } from '../security/cryptoUtils.js';
 
 
 const rl = readline.createInterface({
@@ -28,6 +30,42 @@ function updatePrompt() {
 }
 
 async function dispatcher(input: string) {
+    const debugCryptoMatch = input.match(/^\/debug-crypto$/i);
+    if (debugCryptoMatch) {
+        const testPassword = 'mySecretPassword123!';
+        const testString = 'This is a top secret message.';
+        console.log(`Original string: ${testString}`);
+        console.log(`Password: ${testPassword}`);
+
+        const salt = crypto.randomBytes(16);
+        console.log(`Salt: ${salt.toString('hex')}`);
+
+        try {
+            const key = deriveKey(testPassword, salt);
+            console.log(`Derived Key: ${key.toString('hex')}`);
+
+            const { iv, authTag, encryptedData } = encryptData(testString, key);
+            console.log(`IV: ${iv}`);
+            console.log(`Auth Tag: ${authTag}`);
+            console.log(`Encrypted Data: ${encryptedData}`);
+
+            const decryptedData = decryptData(encryptedData, key, iv, authTag);
+            console.log(`Decrypted string: ${decryptedData}`);
+
+            if (decryptedData === testString) {
+                console.log('Success: Decrypted text perfectly matches original string.');
+            } else {
+                console.error('Error: Decrypted text does not match original string.');
+            }
+        } catch (error) {
+            console.error(`Crypto Error: ${(error as Error).message}`);
+        }
+
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
     if (input === '/exit' || input === 'quit') {
         rl.close();
         return;

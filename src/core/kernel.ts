@@ -2,11 +2,15 @@ import * as readline from 'readline';
 import { Registry } from '../storage/registry.js';
 import { DBManager, ValidationError } from '../storage/dbManager.js';
 import path from 'path';
+import fs from 'fs';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
 import { castValue, getFieldType } from '../validation/typeCaster.js';
 import { runForm } from './formEngine.js';
 import crypto from 'crypto';
 import { deriveKey, encryptData, decryptData, DecryptionError } from '../security/cryptoUtils.js';
+import { initializeVault, unlockVault } from '../security/vault.js';
+import enquirer from 'enquirer';
+
 
 
 const rl = readline.createInterface({
@@ -17,6 +21,8 @@ const rl = readline.createInterface({
 
 const registry = new Registry();
 const dbManager = new DBManager();
+let kernelState: { rootSecret: Buffer | null } = { rootSecret: null };
+
 
 
 let currentDatabase: string | null = null;
@@ -61,6 +67,70 @@ async function dispatcher(input: string) {
             console.error(`Crypto Error: ${(error as Error).message}`);
         }
 
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
+
+    const initVaultMatch = input.match(/^\/init-vault$/i);
+    if (initVaultMatch) {
+        const vaultPath = path.join(process.cwd(), 'data', 'vault.bin');
+        if (fs.existsSync(vaultPath)) {
+            console.error('Error: Vault already initialized.');
+            updatePrompt();
+            rl.prompt();
+            return;
+        }
+
+        rl.pause();
+        try {
+            const response = await enquirer.prompt<{ masterPassword: string }>({
+                type: 'password',
+                name: 'masterPassword',
+                message: 'Create a Master Password for the Vault:'
+            });
+            const confirmResponse = await enquirer.prompt<{ confirmPassword: string }>({
+                type: 'password',
+                name: 'confirmPassword',
+                message: 'Confirm Master Password:'
+            });
+
+            if (response.masterPassword !== confirmResponse.confirmPassword) {
+                console.error('Error: Passwords do not match.');
+            } else {
+                const mnemonic = await initializeVault(response.masterPassword);
+                console.log('\n\x1b[41m\x1b[37m\x1b[1m MASSIVE WARNING: WRITE THIS DOWN \x1b[0m');
+                console.log('\x1b[31m\x1b[1mThis is your ONLY recovery phrase. If you lose your password and this phrase, your data is gone forever.\x1b[0m');
+                console.log('\nRecovery Phrase:');
+                console.log('\x1b[33m\x1b[1m' + mnemonic + '\x1b[0m\n');
+            }
+        } catch (error) {
+            console.error('Vault initialization aborted or failed:', (error as Error).message);
+        }
+        rl.resume();
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+    const unlockMatch = input.match(/^\/unlock$/i);
+    if (unlockMatch) {
+        rl.pause();
+        try {
+            const response = await enquirer.prompt<{ masterPassword: string }>({
+                type: 'password',
+                name: 'masterPassword',
+                message: 'Enter Master Password to unlock Vault:'
+            });
+
+            kernelState.rootSecret = await unlockVault(response.masterPassword);
+            console.log('Vault Unlocked.');
+        } catch (error) {
+            console.error((error as Error).message);
+        }
+        rl.resume();
         updatePrompt();
         rl.prompt();
         return;

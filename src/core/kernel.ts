@@ -21,7 +21,12 @@ const rl = readline.createInterface({
 
 const registry = new Registry();
 const dbManager = new DBManager();
+dbManager.getSessionKey = getSessionKey;
 let kernelState: { rootSecret: Buffer | null } = { rootSecret: null };
+
+export function getSessionKey(): Buffer | null {
+    return kernelState.rootSecret;
+}
 
 
 
@@ -141,7 +146,7 @@ async function dispatcher(input: string) {
         return;
     }
 
-    const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)(?:\s+--schema\s+(.+))?$/i;
+    const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)(?:\s+--schema\s+([^\s]+))?(?:\s+(--encrypt))?$/i;
 
     const listMatch = input.match(/^\/list$/i);
     if (listMatch) {
@@ -301,34 +306,67 @@ async function dispatcher(input: string) {
     if (match) {
         const dbName = match[1];
         let schemaString: string | null = match[2] || null;
+        const isEncrypted = !!match[3];
 
         if (schemaString) {
-            schemaString = schemaString.trim();
-            if ((schemaString.startsWith('"') && schemaString.endsWith('"')) || (schemaString.startsWith("'") && schemaString.endsWith("'"))) {
-                schemaString = schemaString.slice(1, -1);
+            if (schemaString === '--encrypt') {
+                 schemaString = null;
+            } else {
+                 schemaString = schemaString.trim();
+                 if ((schemaString.startsWith('"') && schemaString.endsWith('"')) || (schemaString.startsWith("'") && schemaString.endsWith("'"))) {
+                     schemaString = schemaString.slice(1, -1);
+                 }
             }
         }
+
+        // if there's no schema but there is encrypt, it's possible match[2] captured '--encrypt'
+        if (input.includes('--encrypt') && !isEncrypted && schemaString === '--encrypt') {
+             schemaString = null;
+        }
+
+        const actualIsEncrypted = input.includes('--encrypt');
+
 
         if (registry.get(dbName)) {
             console.error(`Error: Database '${dbName}' already exists.`);
         } else {
-            const relativePath = path.relative(process.cwd(), dbManager.getDbPath(dbName));
-            const created = dbManager.createDatabase(dbName);
-            if (created) {
-                const added = registry.add(dbName, {
-                    path: relativePath,
-                    schema: schemaString,
-                    encrypted: false,
-                    createdAt: Date.now()
-                });
+            if (actualIsEncrypted) {
+                const vaultPath = path.join(process.cwd(), 'data', 'vault.bin');
+                if (!fs.existsSync(vaultPath)) {
+                    console.error('Error: Vault not initialized. Run /init-vault first.');
+                    updatePrompt();
+                    rl.prompt();
+                    return;
+                }
+                if (!getSessionKey()) {
+                    console.error('Error: Vault is locked. Run /unlock first.');
+                    updatePrompt();
+                    rl.prompt();
+                    return;
+                }
+            }
 
-                if (added) {
+            const relativePath = path.relative(process.cwd(), dbManager.getDbPath(dbName));
+
+            // Register FIRST so that createDatabase knows if it should encrypt the initial empty object
+            const added = registry.add(dbName, {
+                path: relativePath,
+                schema: schemaString,
+                encrypted: actualIsEncrypted,
+                createdAt: Date.now()
+            });
+
+            if (added) {
+                const created = dbManager.createDatabase(dbName);
+                if (created) {
                     console.log(`Nexus > Database '${dbName}' created successfully.`);
                 } else {
-                    console.error(`Error: Failed to register database '${dbName}'.`);
+                    // rollback registry if physical creation fails (though it shouldn't)
+                    registry.remove(dbName);
+                    console.error(`Error: Database file for '${dbName}' already exists physically but not in registry.`);
                 }
             } else {
-                 console.error(`Error: Database file for '${dbName}' already exists physically but not in registry.`);
+                console.error(`Error: Failed to register database '${dbName}'.`);
             }
         }
     } else {

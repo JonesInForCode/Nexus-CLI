@@ -1,8 +1,17 @@
 import { z } from 'zod';
 
+const schemaCache = new Map<string, z.ZodTypeAny>();
+
 export function buildZodSchema(schemaString: string | null | undefined, isPartial: boolean = false) {
+    const cacheKey = `${schemaString}|${isPartial}`;
+    if (schemaCache.has(cacheKey)) {
+        return schemaCache.get(cacheKey)!;
+    }
+
     if (!schemaString || schemaString.trim() === '') {
-        return z.record(z.string(), z.any());
+        const genericSchema = z.record(z.string(), z.any());
+        schemaCache.set(cacheKey, genericSchema);
+        return genericSchema;
     }
 
     const fields = schemaString.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -35,5 +44,7 @@ export function buildZodSchema(schemaString: string | null | undefined, isPartia
     }
 
     const schema = z.object(shape);
-    return isPartial ? schema.partial() : schema;
+    const finalSchema = isPartial ? schema.partial() : schema;
+    schemaCache.set(cacheKey, finalSchema);
+    return finalSchema;
 }

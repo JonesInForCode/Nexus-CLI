@@ -40,6 +40,26 @@ function updatePrompt() {
     }
 }
 
+
+async function handleAuthError(): Promise<boolean> {
+    rl.pause();
+    try {
+        const response = await enquirer.prompt<{ masterPassword: string }>({
+            type: 'password',
+            name: 'masterPassword',
+            message: '[Vault Locked] Enter Master Password:'
+        });
+        kernelState.rootSecret = await unlockVault(response.masterPassword);
+        console.log('Vault Unlocked.');
+        rl.resume();
+        return true;
+    } catch (error) {
+        console.error((error as Error).message);
+        rl.resume();
+        return false;
+    }
+}
+
 async function dispatcher(input: string) {
     const debugCryptoMatch = input.match(/^\/debug-crypto$/i);
     if (debugCryptoMatch) {
@@ -141,10 +161,40 @@ async function dispatcher(input: string) {
         return;
     }
 
+
+    const lockMatch = input.match(/^\/lock$/i);
+    if (lockMatch) {
+        if (kernelState.rootSecret) {
+            kernelState.rootSecret.fill(0);
+            kernelState.rootSecret = null;
+            console.log('Vault securely locked. Session key purged from memory.');
+        } else {
+            console.log('Vault is already locked.');
+        }
+
+        if (currentDatabase) {
+            const dbEntry = registry.get(currentDatabase);
+            if (dbEntry && dbEntry.encrypted) {
+                currentDatabase = null;
+                dbManager.currentDbName = null;
+                dbManager.currentData = {};
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
     if (input === '/exit' || input === 'quit') {
+        if (kernelState.rootSecret) {
+            kernelState.rootSecret.fill(0);
+            kernelState.rootSecret = null;
+        }
         rl.close();
         return;
     }
+
 
     const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)(?:\s+--schema\s+([^\s]+))?(?:\s+(--encrypt))?$/i;
 
@@ -181,7 +231,14 @@ async function dispatcher(input: string) {
                 currentDatabase = dbName;
                 console.log(`Switched to workspace: ${dbName}`);
             } catch (error) {
-                console.error((error as Error).message);
+                if ((error as Error).message.includes('AuthError')) {
+                    const unlocked = await handleAuthError();
+                    if (unlocked) {
+                        return dispatcher(input);
+                    }
+                } else {
+                    console.error((error as Error).message);
+                }
             }
         }
         updatePrompt();
@@ -227,6 +284,11 @@ async function dispatcher(input: string) {
                 if (error instanceof ValidationError) {
                     console.error('Validation Error:');
                     error.errors.forEach(err => console.error(err));
+                } else if ((error as Error).message.includes('AuthError')) {
+                    const unlocked = await handleAuthError();
+                    if (unlocked) {
+                        return dispatcher(input);
+                    }
                 } else {
                     console.error((error as Error).message);
                 }
@@ -252,7 +314,14 @@ async function dispatcher(input: string) {
                     console.log(JSON.stringify(data, null, 2));
                 }
             } catch (error) {
-                console.error((error as Error).message);
+                if ((error as Error).message.includes('AuthError')) {
+                    const unlocked = await handleAuthError();
+                    if (unlocked) {
+                        return dispatcher(input);
+                    }
+                } else {
+                    console.error((error as Error).message);
+                }
             }
         }
         updatePrompt();
@@ -292,7 +361,14 @@ async function dispatcher(input: string) {
                 // refresh dbManager state
                 dbManager.useDatabase(currentDatabase);
             } catch (error) {
-                console.error((error as Error).message);
+                if ((error as Error).message.includes('AuthError')) {
+                    const unlocked = await handleAuthError();
+                    if (unlocked) {
+                        return dispatcher(input);
+                    }
+                } else {
+                    console.error((error as Error).message);
+                }
             }
             rl.resume();
         }
@@ -387,10 +463,16 @@ rl.on('line', async (line) => {
     }
 });
 
+
 rl.on('SIGINT', () => {
     console.log('\nCaught interrupt signal. Exiting gracefully...');
+    if (kernelState.rootSecret) {
+        kernelState.rootSecret.fill(0);
+        kernelState.rootSecret = null;
+    }
     rl.close();
 });
+
 
 rl.on('close', () => {
     process.exit(0);

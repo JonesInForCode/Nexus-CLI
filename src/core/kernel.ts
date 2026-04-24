@@ -11,6 +11,8 @@ import crypto from 'crypto';
 import { deriveKey, encryptData, decryptData, DecryptionError } from '../security/cryptoUtils.js';
 import { initializeVault, unlockVault } from '../security/vault.js';
 import enquirer from 'enquirer';
+import { compileTemplate } from './compiler.js';
+
 
 
 
@@ -408,7 +410,47 @@ async function dispatcher(input: string) {
 
 
 
+
+    const renderTestMatch = input.match(/^\/render-test\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
+    if (renderTestMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const templateName = renderTestMatch[1];
+            const anchor = renderTestMatch[2];
+
+            const templatePath = path.join(process.cwd(), 'data', 'templates', `${templateName}.json`);
+            if (!fs.existsSync(templatePath)) {
+                console.error(`Error: Template '${templateName}' not found at ${templatePath}.`);
+            } else {
+                try {
+                    const templateObj = JSON.parse(fs.readFileSync(templatePath, "utf-8"));
+                    const dataObj = dbManager.get(anchor);
+                    if (dataObj === undefined) {
+                        console.error(`Error: No data found for anchor '${anchor}'.`);
+                    } else {
+                        const output = compileTemplate(templateObj, dataObj);
+                        console.log(output);
+                    }
+                } catch (error) {
+                    if ((error as Error).message.includes('AuthError')) {
+                        const unlocked = await handleAuthError();
+                        if (unlocked) {
+                            return dispatcher(input);
+                        }
+                    } else {
+                        console.error((error as Error).message);
+                    }
+                }
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
     const createTemplateMatch = input.match(/^\/create\s+template\s+([a-zA-Z0-9_-]+)$/i);
+
     if (createTemplateMatch) {
         const templateName = createTemplateMatch[1];
         try {

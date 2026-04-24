@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import { Registry } from '../storage/registry.js';
 import { DBManager, ValidationError } from '../storage/dbManager.js';
+import { createTemplate } from '../storage/templateManager.js';
 import path from 'path';
 import fs from 'fs';
 import { buildZodSchema } from '../validation/schemaBuilder.js';
@@ -196,7 +197,30 @@ async function dispatcher(input: string) {
     }
 
 
+
+
     const createDbRegex = /^\/create\s+database\s+([a-zA-Z0-9_]+)(?:\s+--schema\s+([^\s]+))?(?:\s+(--encrypt))?$/i;
+
+
+    const listTemplatesMatch = input.match(/^\/list-templates$/i);
+    if (listTemplatesMatch) {
+        const templates = registry.getTemplates();
+        const output = Object.keys(templates).map(name => {
+            const tmpl = templates[name];
+            return {
+                Name: name,
+                Created: new Date(tmpl.createdAt).toLocaleString()
+            };
+        });
+        if (output.length === 0) {
+            console.log('No templates registered.');
+        } else {
+            console.table(output);
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
 
     const listMatch = input.match(/^\/list$/i);
     if (listMatch) {
@@ -371,6 +395,27 @@ async function dispatcher(input: string) {
                 }
             }
             rl.resume();
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+
+
+
+
+
+
+
+    const createTemplateMatch = input.match(/^\/create\s+template\s+([a-zA-Z0-9_-]+)$/i);
+    if (createTemplateMatch) {
+        const templateName = createTemplateMatch[1];
+        try {
+            await createTemplate(templateName);
+            console.log(`Template '${templateName}' created. Edit the file at data/templates/${templateName}.json to define your layout.`);
+        } catch (error) {
+            console.error(`Error: ${(error as Error).message}`);
         }
         updatePrompt();
         rl.prompt();

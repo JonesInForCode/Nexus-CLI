@@ -57,6 +57,10 @@ export class DBManager {
         return rawData;
     }
 
+    private createBackup(): Record<string, any> {
+        return JSON.parse(JSON.stringify(this.currentData));
+    }
+
     private saveDatabase(name: string, data: any): void {
         const dbPath = this.getDbPath(name);
         const tmpPath = `${dbPath}.tmp`;
@@ -113,7 +117,7 @@ export class DBManager {
             throw new Error('No database selected.');
         }
 
-        const backup = JSON.parse(JSON.stringify(this.currentData));
+        const backup = this.createBackup();
 
         if (!this.currentData[anchor]) {
             this.currentData[anchor] = {};
@@ -136,7 +140,7 @@ export class DBManager {
             throw new Error('No database selected.');
         }
 
-        const backup = JSON.parse(JSON.stringify(this.currentData));
+        const backup = this.createBackup();
 
         this.currentData[anchor] = record;
 

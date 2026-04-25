@@ -13,6 +13,7 @@ import { deriveKey, encryptData, decryptData, DecryptionError } from '../securit
 import { initializeVault, unlockVault } from '../security/vault.js';
 import enquirer from 'enquirer';
 import { compileTemplate } from './compiler.js';
+import { startServer, broadcast } from './broadcaster.js';
 
 
 
@@ -452,7 +453,61 @@ async function dispatcher(input: string) {
         return;
     }
 
-const renderTestMatch = input.match(/^\/render-test\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
+
+    const serveMatch = input.match(/^\/serve/i);
+    if (serveMatch) {
+        try {
+            await startServer();
+            console.log('Live GUI Broadcast Server started on ws://localhost:8080');
+            console.log('Open data/templates/viewer.html in your browser to view.');
+        } catch (error) {
+            console.error('Failed to start Live GUI Broadcast Server:', error);
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+    const pushMatch = input.match(/^\/push\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
+    if (pushMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const templateName = pushMatch[1];
+            const anchor = pushMatch[2];
+
+            const templatePath = path.join(process.cwd(), 'data', 'templates', `${templateName}.json`);
+            if (!fs.existsSync(templatePath)) {
+                console.error(`Error: Template '${templateName}' not found at ${templatePath}.`);
+            } else {
+                try {
+                    const templateObj = JSON.parse(fs.readFileSync(templatePath, "utf-8"));
+                    const dataObj = dbManager.get(anchor);
+                    if (dataObj === undefined) {
+                        console.error(`Error: No data found for anchor '${anchor}'.`);
+                    } else {
+                        const output = compileTemplate(templateObj, dataObj);
+                        broadcast(output);
+                        console.log(`Pushed ${templateName} to Live GUI.`);
+                    }
+                } catch (error) {
+                    if ((error as Error).message.includes('AuthError')) {
+                        const unlocked = await handleAuthError();
+                        if (unlocked) {
+                            return dispatcher(input);
+                        }
+                    } else {
+                        console.error((error as Error).message);
+                    }
+                }
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+    const renderTestMatch = input.match(/^\/render-test\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
     if (renderTestMatch) {
         if (!currentDatabase) {
             console.error('Error: No database selected. Use /use [name] first.');

@@ -1,3 +1,4 @@
+import { exportHtml } from './exporter.js';
 import * as readline from 'readline';
 import { Registry } from '../storage/registry.js';
 import { DBManager, ValidationError } from '../storage/dbManager.js';
@@ -411,7 +412,47 @@ async function dispatcher(input: string) {
 
 
 
-    const renderTestMatch = input.match(/^\/render-test\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
+
+    const renderMatch = input.match(/^\/render\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
+    if (renderMatch) {
+        if (!currentDatabase) {
+            console.error('Error: No database selected. Use /use [name] first.');
+        } else {
+            const templateName = renderMatch[1];
+            const anchor = renderMatch[2];
+
+            const templatePath = path.join(process.cwd(), 'data', 'templates', `${templateName}.json`);
+            if (!fs.existsSync(templatePath)) {
+                console.error(`Error: Template '${templateName}' not found at ${templatePath}.`);
+            } else {
+                try {
+                    const templateObj = JSON.parse(fs.readFileSync(templatePath, "utf-8"));
+                    const dataObj = dbManager.get(anchor);
+                    if (dataObj === undefined) {
+                        console.error(`Error: No data found for anchor '${anchor}'.`);
+                    } else {
+                        const output = compileTemplate(templateObj, dataObj);
+                        const outputPath = await exportHtml(currentDatabase, anchor, templateName, output);
+                        console.log(`Render Complete! Output saved to: ${outputPath}`);
+                    }
+                } catch (error) {
+                    if ((error as Error).message.includes('AuthError')) {
+                        const unlocked = await handleAuthError();
+                        if (unlocked) {
+                            return dispatcher(input);
+                        }
+                    } else {
+                        console.error((error as Error).message);
+                    }
+                }
+            }
+        }
+        updatePrompt();
+        rl.prompt();
+        return;
+    }
+
+const renderTestMatch = input.match(/^\/render-test\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_]+)$/i);
     if (renderTestMatch) {
         if (!currentDatabase) {
             console.error('Error: No database selected. Use /use [name] first.');
